@@ -122,7 +122,8 @@ struct thread
 	struct list_elem allelem; /* List element. */
 
 #ifdef USERPROG
-	/* Owned by userprog/process.c. */
+	// 4단계 페이지 테이블 구조를 사용하며, pml4는 Page Map Level 4 (PML4)의 위치를 가리킴
+	// userprog/process.c에서 사용됨
 	uint64_t *pml4; /* Page map level 4 */
 
 	/** #Project 2: System Call */

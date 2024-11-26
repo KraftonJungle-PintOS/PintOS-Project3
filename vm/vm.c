@@ -4,17 +4,21 @@
 #include "vm/vm.h"
 #include "vm/inspect.h"
 
-/* Initializes the virtual memory subsystem by invoking each subsystem's
- * intialize codes. */
+// 가상 메모리의 subsystem을 초기화 하는 함수
+//  각 서브시스템의 초기화 코드를 호출하여, 가상 메모리 관련 기능들을 설정
 void
 vm_init (void) {
+	// Anonymous page 초기화 함수
 	vm_anon_init ();
+	// File-backed Page 초기화 함수
 	vm_file_init ();
 #ifdef EFILESYS  /* For project 4 */
 	pagecache_init ();
 #endif
 	register_inspect_intr ();
 	/* DO NOT MODIFY UPPER LINES. */
+
+	
 	/* TODO: Your code goes here. */
 }
 

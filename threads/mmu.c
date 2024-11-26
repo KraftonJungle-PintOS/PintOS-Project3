@@ -8,6 +8,17 @@
 #include "threads/mmu.h"
 #include "intrinsic.h"
 
+// 페이지 계층 순서 PML4 -> PDPT -> PD -> PTE
+
+/* 함수 설명 */
+// PD에서 PTE를 탐색하는 함수
+/* 매개 변수 */
+// pdp: 페이지 디렉터리 포인터 테이블(PDPT)의 시작 주소
+// va: 찾고자 하는 가상 주소
+// create: 1: PTE가 없으면 새로 생성, 0: PTE가 없으면 NULL 반환
+/* 반환 값 */
+// 가상 주소에 해당하는 페이지 테이블 엔트리(PTE)의 주소
+// 찾거나 생성에 실패하면 NULL 반환
 static uint64_t *
 pgdir_walk (uint64_t *pdp, const uint64_t va, int create) {
 	int idx = PDX (va);
@@ -28,6 +39,17 @@ pgdir_walk (uint64_t *pdp, const uint64_t va, int create) {
 	return NULL;
 }
 
+/* 함수 설명 */
+// PDPT에서 PD를 탐색하는 함수
+/* 매개 변수 */
+// pdpe: 페이지 디렉터리 포인터 엔트리(PDPE) 테이블의 시작 주소
+// va: 찾고자 하는 가상 주소
+// create:
+// 1: 필요한 경우 하위 테이블(PD 및 PTE)을 새로 생성
+// 0: 필요한 테이블이 없으면 NULL 반환
+/* 반환 값 */
+// 가상 주소에 해당하는 페이지 테이블 엔트리(PTE)의 주소
+// 찾거나 생성에 실패하면 NULL 반환
 static uint64_t *
 pdpe_walk (uint64_t *pdpe, const uint64_t va, int create) {
 	uint64_t *pte = NULL;
@@ -55,12 +77,17 @@ pdpe_walk (uint64_t *pdpe, const uint64_t va, int create) {
 	return pte;
 }
 
-/* Returns the address of the page table entry for virtual
- * address VADDR in page map level 4, pml4.
- * If PML4E does not have a page table for VADDR, behavior depends
- * on CREATE.  If CREATE is true, then a new page table is
- * created and a pointer into it is returned.  Otherwise, a null
- * pointer is returned. */
+/* 함수 설명 */
+// PML4에서 PDPT를 탐색하는 함수
+/* 매개 변수 */
+// pml4e: PML4 엔트리 배열의 시작 주소
+// va: 찾고자 하는 가상 주소
+// create:
+// 1: 필요한 경우 하위 테이블(PDPT 및 PTE)을 새로 생성
+// 0: 필요한 테이블이 없으면 NULL 반환
+/* 반환 값 */
+// 가상 주소에 해당하는 페이지 테이블 엔트리(PTE)의 주소
+// 찾거나 생성에 실패하면 NULL 반환
 uint64_t *
 pml4e_walk (uint64_t *pml4e, const uint64_t va, int create) {
 	uint64_t *pte = NULL;
@@ -88,10 +115,11 @@ pml4e_walk (uint64_t *pml4e, const uint64_t va, int create) {
 	return pte;
 }
 
-/* Creates a new page map level 4 (pml4) has mappings for kernel
- * virtual addresses, but none for user virtual addresses.
- * Returns the new page directory, or a null pointer if memory
- * allocation fails. */
+/* 함수 설명 */
+// 새로운 PML4(Page Map Level 4) 테이블을 생성하는 함수
+/* 반환 값 */
+// 생성된 PML4 테이블의 시작 주소
+// 메모리 할당이 실패하면 NULL을 반환
 uint64_t *
 pml4_create (void) {
 	uint64_t *pml4 = palloc_get_page (0);
@@ -100,6 +128,18 @@ pml4_create (void) {
 	return pml4;
 }
 
+/* 함수 설명 */
+// 페이지 테이블(PT)의 모든 엔트리를 순회하며, PTE에 대해 주어진 함수(FUNC)를 호출하는 함수
+/* 매개 변수 */
+// pt: 페이지 테이블(PT)의 시작 주소
+// func: 각 PTE에 대해 호출할 함수의 포인터
+// aux: 함수(FUNC)에 추가로 전달할 사용자 정의 데이터
+// pml4_index: 현재 PT가 속한 PML4 인덱스
+// pdp_index: 현재 PT가 속한 PDPT 인덱스
+// pdx_index: 현재 PT가 속한 PD 인덱스
+/* 반환 값 */
+// 모든 엔트리에 대해 함수가 성공적으로 실행되면 true
+// 하나라도 실패하면 false
 static bool
 pt_for_each (uint64_t *pt, pte_for_each_func *func, void *aux,
 		unsigned pml4_index, unsigned pdp_index, unsigned pdx_index) {
@@ -117,6 +157,17 @@ pt_for_each (uint64_t *pt, pte_for_each_func *func, void *aux,
 	return true;
 }
 
+/* 함수 설명 */
+// 페이지 디렉터리(PD)의 모든 엔트리를 순회하며, PTE에 대해 주어진 함수(FUNC)를 호출하는 함수
+/* 매개 변수 */
+// pdp: 페이지 디렉터리(PD)의 시작 주소
+// func: 각 PTE에 대해 호출할 함수의 포인터
+// aux: 함수(FUNC)에 추가로 전달할 사용자 정의 데이터
+// pml4_index: 현재 PD가 속한 PML4 인덱스
+// pdp_index: 현재 PD가 속한 PDPT 인덱스
+/* 반환 값 */
+// 모든 엔트리에 대해 함수가 성공적으로 실행되면 true
+// 하나라도 실패하면 false
 static bool
 pgdir_for_each (uint64_t *pdp, pte_for_each_func *func, void *aux,
 		unsigned pml4_index, unsigned pdp_index) {
@@ -130,6 +181,16 @@ pgdir_for_each (uint64_t *pdp, pte_for_each_func *func, void *aux,
 	return true;
 }
 
+/* 함수 설명 */
+// 페이지 디렉터리 포인터 테이블(PDPT)의 모든 엔트리를 순회하며, PTE에 대해 주어진 함수(FUNC)를 호출하는 함수
+/* 매개 변수 */
+// pdp: 페이지 디렉터리 포인터 테이블(PDPT)의 시작 주소
+// func: 각 PTE에 대해 호출할 함수의 포인터
+// aux: 함수(FUNC)에 추가로 전달할 사용자 정의 데이터
+// pml4_index: 현재 PDPT가 속한 PML4 인덱스
+/* 반환 값 */
+// 모든 엔트리에 대해 함수가 성공적으로 실행되면 true
+// 하나라도 실패하면 false
 static bool
 pdp_for_each (uint64_t *pdp,
 		pte_for_each_func *func, void *aux, unsigned pml4_index) {
@@ -143,7 +204,15 @@ pdp_for_each (uint64_t *pdp,
 	return true;
 }
 
-/* Apply FUNC to each available pte entries including kernel's. */
+/* 함수 설명 */
+// PML4 테이블의 모든 엔트리를 순회하며, PTE에 대해 주어진 함수(FUNC)를 호출하는 함수
+/* 매개 변수 */
+// pml4: PML4 테이블의 시작 주소
+// func: 각 PTE에 대해 호출할 함수의 포인터
+// aux: 함수(FUNC)에 추가로 전달할 사용자 정의 데이터
+/* 반환 값 */
+// 모든 엔트리에 대해 함수가 성공적으로 실행되면 true
+// 하나라도 실패하면 false
 bool
 pml4_for_each (uint64_t *pml4, pte_for_each_func *func, void *aux) {
 	for (unsigned i = 0; i < PGSIZE / sizeof(uint64_t *); i++) {
@@ -155,6 +224,10 @@ pml4_for_each (uint64_t *pml4, pte_for_each_func *func, void *aux) {
 	return true;
 }
 
+/* 함수 설명 */
+// 페이지 테이블(PT)과 해당 엔트리를 해제하는 함수
+/* 매개 변수 */
+// pt: 페이지 테이블(PT)의 시작 주소
 static void
 pt_destroy (uint64_t *pt) {
 	for (unsigned i = 0; i < PGSIZE / sizeof(uint64_t *); i++) {
@@ -165,6 +238,10 @@ pt_destroy (uint64_t *pt) {
 	palloc_free_page ((void *) pt);
 }
 
+/* 함수 설명 */
+// 페이지 디렉터리(PD)와 해당 엔트리를 해제하는 함수
+/* 매개 변수 */
+// pdp: 페이지 디렉터리(PD)의 시작 주소
 static void
 pgdir_destroy (uint64_t *pdp) {
 	for (unsigned i = 0; i < PGSIZE / sizeof(uint64_t *); i++) {
@@ -175,6 +252,10 @@ pgdir_destroy (uint64_t *pdp) {
 	palloc_free_page ((void *) pdp);
 }
 
+/* 함수 설명 */
+// 페이지 디렉터리 포인터 테이블(PDPT)과 해당 엔트리를 해제하는 함수
+/* 매개 변수 */
+// pdpe: 페이지 디렉터리 포인터 테이블(PDPT)의 시작 주소
 static void
 pdpe_destroy (uint64_t *pdpe) {
 	for (unsigned i = 0; i < PGSIZE / sizeof(uint64_t *); i++) {
@@ -185,7 +266,10 @@ pdpe_destroy (uint64_t *pdpe) {
 	palloc_free_page ((void *) pdpe);
 }
 
-/* Destroys pml4e, freeing all the pages it references. */
+/* 함수 설명 */
+// PML4 테이블과 해당 엔트리를 해제하는 함수
+/* 매개 변수 */
+// pml4: PML4 테이블의 시작 주소
 void
 pml4_destroy (uint64_t *pml4) {
 	if (pml4 == NULL)
@@ -199,17 +283,22 @@ pml4_destroy (uint64_t *pml4) {
 	palloc_free_page ((void *) pml4);
 }
 
-/* Loads page directory PD into the CPU's page directory base
- * register. */
+/* 함수 설명 */
+// PML4를 활성화하여 CPU의 페이지 디렉터리 기준 레지스터(CR3)에 로드하는 함수
+/* 매개 변수 */
+// pml4: 활성화할 PML4 테이블의 시작 주소
 void
 pml4_activate (uint64_t *pml4) {
 	lcr3 (vtop (pml4 ? pml4 : base_pml4));
 }
 
-/* Looks up the physical address that corresponds to user virtual
- * address UADDR in pml4.  Returns the kernel virtual address
- * corresponding to that physical address, or a null pointer if
- * UADDR is unmapped. */
+/* 함수 설명 */
+// PML4에서 주어진 가상 주소(UADDR)에 해당하는 물리 주소를 반환하는 함수
+/* 매개 변수 */
+// pml4: PML4 테이블의 시작 주소
+// uaddr: 찾고자 하는 사용자 가상 주소
+/* 반환 값 */
+// 가상 주소에 매핑된 물리 주소의 커널 가상 주소, 또는 NULL (매핑되지 않은 경우)
 void *
 pml4_get_page (uint64_t *pml4, const void *uaddr) {
 	ASSERT (is_user_vaddr (uaddr));
@@ -221,14 +310,15 @@ pml4_get_page (uint64_t *pml4, const void *uaddr) {
 	return NULL;
 }
 
-/* Adds a mapping in page map level 4 PML4 from user virtual page
- * UPAGE to the physical frame identified by kernel virtual address KPAGE.
- * UPAGE must not already be mapped. KPAGE should probably be a page obtained
- * from the user pool with palloc_get_page().
- * If WRITABLE is true, the new page is read/write;
- * otherwise it is read-only.
- * Returns true if successful, false if memory allocation
- * failed. */
+/* 함수 설명 */
+// 가상 페이지(UPAGE)를 물리 페이지(KPAGE)에 매핑하는 함수
+/* 매개 변수 */
+// pml4: PML4 테이블의 시작 주소
+// upage: 가상 페이지 주소
+// kpage: 물리 페이지의 커널 가상 주소
+// rw: true면 읽기/쓰기, false면 읽기 전용으로 매핑
+/* 반환 값 */
+// 매핑 성공 시 true, 실패 시 false
 bool
 pml4_set_page (uint64_t *pml4, void *upage, void *kpage, bool rw) {
 	ASSERT (pg_ofs (upage) == 0);
@@ -243,10 +333,11 @@ pml4_set_page (uint64_t *pml4, void *upage, void *kpage, bool rw) {
 	return pte != NULL;
 }
 
-/* Marks user virtual page UPAGE "not present" in page
- * directory PD.  Later accesses to the page will fault.  Other
- * bits in the page table entry are preserved.
- * UPAGE need not be mapped. */
+/* 함수 설명 */
+// 가상 페이지(UPAGE)를 "존재하지 않음" 상태로 설정하여 이후 접근 시 페이지 폴트를 발생시키는 함수
+/* 매개 변수 */
+// pml4: PML4 테이블의 시작 주소
+// upage: 제거할 가상 페이지 주소
 void
 pml4_clear_page (uint64_t *pml4, void *upage) {
 	uint64_t *pte;
@@ -262,18 +353,25 @@ pml4_clear_page (uint64_t *pml4, void *upage) {
 	}
 }
 
-/* Returns true if the PTE for virtual page VPAGE in PML4 is dirty,
- * that is, if the page has been modified since the PTE was
- * installed.
- * Returns false if PML4 contains no PTE for VPAGE. */
+/* 함수 설명 */
+// 가상 페이지(VPAGE)가 수정되었는지(Dirty Bit가 설정되었는지) 확인하는 함수
+/* 매개 변수 */
+// pml4: PML4 테이블의 시작 주소
+// vpage: 확인할 가상 페이지 주소
+/* 반환 값 */
+// 페이지가 수정된 경우 true, 그렇지 않으면 false
 bool
 pml4_is_dirty (uint64_t *pml4, const void *vpage) {
 	uint64_t *pte = pml4e_walk (pml4, (uint64_t) vpage, false);
 	return pte != NULL && (*pte & PTE_D) != 0;
 }
 
-/* Set the dirty bit to DIRTY in the PTE for virtual page VPAGE
- * in PML4. */
+/* 함수 설명 */
+// 가상 페이지(VPAGE)의 Dirty Bit를 설정 또는 해제하는 함수
+/* 매개 변수 */
+// pml4: PML4 테이블의 시작 주소
+// vpage: 설정할 가상 페이지 주소
+// dirty: true면 Dirty Bit를 설정, false면 해제
 void
 pml4_set_dirty (uint64_t *pml4, const void *vpage, bool dirty) {
 	uint64_t *pte = pml4e_walk (pml4, (uint64_t) vpage, false);
@@ -288,18 +386,25 @@ pml4_set_dirty (uint64_t *pml4, const void *vpage, bool dirty) {
 	}
 }
 
-/* Returns true if the PTE for virtual page VPAGE in PML4 has been
- * accessed recently, that is, between the time the PTE was
- * installed and the last time it was cleared.  Returns false if
- * PML4 contains no PTE for VPAGE. */
+/* 함수 설명 */
+// 가상 페이지(VPAGE)가 최근에 접근되었는지(Accessed Bit가 설정되었는지) 확인하는 함수
+/* 매개 변수 */
+// pml4: PML4 테이블의 시작 주소
+// vpage: 확인할 가상 페이지 주소
+/* 반환 값 */
+// 페이지가 접근된 경우 true, 그렇지 않으면 false
 bool
 pml4_is_accessed (uint64_t *pml4, const void *vpage) {
 	uint64_t *pte = pml4e_walk (pml4, (uint64_t) vpage, false);
 	return pte != NULL && (*pte & PTE_A) != 0;
 }
 
-/* Sets the accessed bit to ACCESSED in the PTE for virtual page
-   VPAGE in PD. */
+/* 함수 설명 */
+// 가상 페이지(VPAGE)의 Accessed Bit를 설정 또는 해제하는 함수
+/* 매개 변수 */
+// pml4: PML4 테이블의 시작 주소
+// vpage: 설정할 가상 페이지 주소
+// accessed: true면 Accessed Bit를 설정, false면 해제
 void
 pml4_set_accessed (uint64_t *pml4, const void *vpage, bool accessed) {
 	uint64_t *pte = pml4e_walk (pml4, (uint64_t) vpage, false);
