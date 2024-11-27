@@ -202,10 +202,31 @@ vm_get_frame(void)
     return frame; // 초기화된 프레임 반환
 }
 
-/* Growing the stack. */
+// Project 3: Stack Growth
+// 이 함수는 스택이 늘어나는 경우 호출되며, 주어진 주소에 새 페이지를 할당하여 스택을 확장
 static void
 vm_stack_growth(void *addr UNUSED)
 {
+    // 페이지 경계로 주소 정렬
+    // 주소를 페이지 크기(4KB)에 맞게 아래쪽으로 정렬합니다.
+    void *aligned_addr = pg_round_down(addr);
+
+    // 새로운 페이지를 스택에 할당
+    // 익명 페이지(VM_ANON)를 생성하고, 해당 페이지를 스택용으로 표시(VM_MARKER_0)
+    // true: 페이지를 쓰기 가능으로 설정
+    if (!vm_alloc_page(VM_ANON | VM_MARKER_0, aligned_addr, true))
+    {
+        // 페이지 할당에 실패하면 커널 패닉 발생
+        PANIC("Stack growth failed: Could not allocate a new page.");
+    }
+
+    // 방금 할당한 페이지를 즉시 클레임
+    // 페이지를 활성화하여 실제로 사용할 수 있도록 설정
+    if (!vm_claim_page(aligned_addr))
+    {
+        // 클레임에 실패하면 커널 패닉 발생
+        PANIC("Stack growth failed: Could not claim the new page.");
+    }
 }
 
 /* Handle the fault on write_protected page */
@@ -227,16 +248,20 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 
     // 보조 페이지 테이블에서 페이지를 찾기
     struct page *page = spt_find_page(spt, addr);
-    if (page == NULL)
-        return false; // 해당 주소에 매핑된 페이지가 없으면 false 반환
 
-    // 쓰기 접근인지 확인하고 페이지 권한 검사
-    if (write && !page->writable)
-        return false; // 쓰기 권한이 없는 페이지에 쓰기 시도 시 false 반환
+    // Project 3: Stack Growth
+    // 페이지가 NULL이고 주소가 유효한 스택 확장 범위 내라면 스택 확장 시도
+    if (page == NULL && addr >= f->rsp - 8 && addr < (void *)USER_STACK)
+    {
+        vm_stack_growth(addr);
+        return true; // 스택 확장 성공
+    }
+
+    // 페이지가 존재하지 않거나, 쓰기 권한 검사 실패 시 false 반환
+    if (page == NULL || (write && !page->writable))
+        return false;
 
     // 페이지를 실제로 메모리에 매핑
-    return vm_do_claim_page(page);
-
     return vm_do_claim_page(page);
 }
 
@@ -374,6 +399,7 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst,
 
 // Project 3: Anonymous Page
 // 보조 페이지 테이블(supplemental page table)에 의해 점유된 리소스를 해제하는 함수
-void supplemental_page_table_kill(struct supplemental_page_table *spt UNUSED) {
-    hash_clear(&spt->page_table, hash_destructor);  // 해시 테이블의 모든 요소 제거
+void supplemental_page_table_kill(struct supplemental_page_table *spt UNUSED)
+{
+    hash_clear(&spt->page_table, hash_destructor); // 해시 테이블의 모든 요소 제거
 }
