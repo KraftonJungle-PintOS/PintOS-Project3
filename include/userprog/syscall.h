@@ -26,4 +26,7 @@ void seek(int fd, unsigned position);
 int tell(int fd);
 void close(int fd);
 
+/** #Project 2: System Call */
+extern struct lock filesys_lock; // 파일 읽기/쓰기 용 lock
+
 #endif /* userprog/syscall.h */

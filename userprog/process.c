@@ -7,6 +7,7 @@
 #include <string.h>
 #include "userprog/gdt.h"
 #include "userprog/tss.h"
+#include "userprog/syscall.h"
 #include "filesys/directory.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
@@ -442,6 +443,9 @@ load(const char *file_name, struct intr_frame *if_)
 		goto done;
 	process_activate(thread_current());
 
+	/** #Project 3: Memory Management - Load Race 방지 */
+    lock_acquire(&filesys_lock);
+
 	/* Open executable file. */
 	file = filesys_open(file_name);
 	if (file == NULL)
@@ -536,6 +540,9 @@ load(const char *file_name, struct intr_frame *if_)
 
 done:
 	/* We arrive here whether the load is successful or not. */
+	/** #Project 3: Memory Management - Load Race 방지 */
+	lock_release(&filesys_lock);
+
 	return success;
 }
 
