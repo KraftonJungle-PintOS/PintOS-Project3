@@ -69,6 +69,9 @@ struct page
 	struct frame *frame;
 
 	/* Your implementation */
+	// Project 3: Anonymous Page
+	bool writable;
+
 	struct hash_elem hash_elem;
 
 	// 페이지 타입별 데이터 저장 공간
@@ -80,7 +83,7 @@ struct page
 		struct anon_page anon;
 		struct file_page file;
 #ifdef EFILESYS
-		struct page_cache page_cache;
+		struct page_cache;
 #endif
 	};
 };
@@ -96,7 +99,7 @@ struct frame
 	struct page *page;
 
 	// Project 3: Memory Management
-    struct list_elem frame_elem;
+	struct list_elem frame_elem;
 };
 
 /* The function table for page operations.

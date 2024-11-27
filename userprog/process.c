@@ -444,7 +444,7 @@ load(const char *file_name, struct intr_frame *if_)
 	process_activate(thread_current());
 
 	/** #Project 3: Memory Management - Load Race 방지 */
-    lock_acquire(&filesys_lock);
+	lock_acquire(&filesys_lock);
 
 	/* Open executable file. */
 	file = filesys_open(file_name);
@@ -701,13 +701,40 @@ install_page(void *upage, void *kpage, bool writable)
  * If you want to implement the function for only project 2, implement it on the
  * upper block. */
 
+// Project 3: Anonymous Page
+// Lazy Loading 구현
 static bool
 lazy_load_segment(struct page *page, void *aux)
 {
-	/* TODO: Load the segment from the file */
-	/* TODO: This called when the first page fault occurs on address VA. */
-	/* TODO: VA is available when calling this function. */
+	// aux 구조체를 이용하여 파일 정보를 가져옴
+	struct aux *load_info = (struct aux *)aux;
+	struct file *file = load_info->file;
+	off_t offset = load_info->offset;
+	size_t page_read_bytes = load_info->page_read_bytes;
+	size_t page_zero_bytes = PGSIZE - page_read_bytes;
+
+	// 파일 위치를 offset으로 설정
+	file_seek(file, offset); // 리턴값이 void이므로 비교하지 않음
+
+	// 페이지의 커널 가상 주소(kva) 가져오기
+	void *kva = page->frame->kva;
+
+	// 파일에서 데이터 읽어오기
+	if (file_read(file, kva, page_read_bytes) != (int)page_read_bytes)
+	{
+		free(aux); // 파일 읽기 실패 시 aux 메모리 해제
+		return false;
+	}
+
+	// 나머지 부분을 0으로 초기화
+	memset(kva + page_read_bytes, 0, page_zero_bytes);
+
+	// aux 메모리 해제
+	free(aux);
+
+	return true; // 페이지 로드 성공
 }
+
 
 /* Loads a segment starting at offset OFS in FILE at address
  * UPAGE.  In total, READ_BYTES + ZERO_BYTES bytes of virtual
@@ -739,8 +766,17 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
 		size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
-		/* TODO: Set up aux to pass information to the lazy_load_segment. */
-		void *aux = NULL;
+		// Project 3: Anonymous Page
+		// 페이지 로드 시 Lazy Loading을 위해 필요한 파일 정보를 aux 구조체에 저장
+		// aux 구조체는 Lazy Loading(페이지 폴트) 시 파일 정보를 전달하는 역할을 함
+		// 이 정보는 lazy_load_segment에서 참조됨
+		// 나중에 Page Fault때 aux를 통해 파일 정보를 참고함
+
+		struct aux *aux = (struct aux *)malloc(sizeof(struct aux));
+		aux->file = file;
+		aux->offset = ofs;
+		aux->page_read_bytes = page_read_bytes;
+
 		if (!vm_alloc_page_with_initializer(VM_ANON, upage,
 											writable, lazy_load_segment, aux))
 			return false;
@@ -753,17 +789,27 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 	return true;
 }
 
-/* Create a PAGE of stack at the USER_STACK. Return true on success. */
+// Project 3: Anonymous Page
+// 사용자 스택을 생성,설정하는 함수
+// intr_frame은 인터럽트 프레임 구조체로, 스택 포인터(rsp)를 설정
 static bool
 setup_stack(struct intr_frame *if_)
 {
+	// 스택 설정 성공 여부를 나타내는 변수
 	bool success = false;
+	// 새로 할당할 스택 페이지의 시작 주소를 계산
+	// 사용자 스택은 USER_STACK에서 아래로 확장되므로, 페이지 크기(PGSIZE)만큼 아래쪽 주소를 사용
 	void *stack_bottom = (void *)(((uint8_t *)USER_STACK) - PGSIZE);
 
-	/* TODO: Map the stack on stack_bottom and claim the page immediately.
-	 * TODO: If success, set the rsp accordingly.
-	 * TODO: You should mark the page is stack. */
-	/* TODO: Your code goes here */
+	// 스택 페이지를 즉시 할당하고 매핑
+	if (vm_alloc_page_with_initializer(VM_ANON | VM_MARKER_0, stack_bottom,
+									   true, NULL, NULL) &&
+		vm_claim_page(stack_bottom))
+	{
+		// 할당 성공 시 스택 포인터를 USER_STACK으로 설정
+		if_->rsp = USER_STACK;
+		success = true;
+	}
 
 	return success;
 }

@@ -22,6 +22,16 @@ static const struct page_operations uninit_ops = {
 	.type = VM_UNINIT,
 };
 
+// Project 3: Anonymous Page
+/* 함수 설명 */
+// 초기화되지 않은 페이지(uninit 페이지)를 생성하고 설정하는 함수
+/* 매개 변수 */
+// page: 초기화할 페이지 구조체
+// va: 페이지의 가상 주소
+// init: 페이지의 초기화자 함수
+// type: 페이지의 타입
+// aux: 초기화에 필요한 추가 데이터
+// anon_initializer: 페이지 타입에 따라 호출할 초기화 함수
 /* DO NOT MODIFY this function */
 void
 uninit_new (struct page *page, void *va, vm_initializer *init,
@@ -40,9 +50,12 @@ uninit_new (struct page *page, void *va, vm_initializer *init,
 			.page_initializer = initializer,
 		}
 	};
+
 }
 
-/* Initalize the page on first fault */
+// Project 3: Anonymous Page
+// 페이지 폴트 발생 시 초기화하는 함수
+// 수정 필요할수도 있음
 static bool
 uninit_initialize (struct page *page, void *kva) {
 	struct uninit_page *uninit = &page->uninit;

@@ -103,4 +103,7 @@ uint64_t hash_int(int);
 unsigned page_hash_func(const struct hash_elem *e, void *aux);
 bool page_less_func(const struct hash_elem *a, const struct hash_elem *b, void *aux);
 
+// Project 3: Anonymous Page
+void hash_destructor(struct hash_elem *e, void *aux);
+
 #endif /* lib/kernel/hash.h */

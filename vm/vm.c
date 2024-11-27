@@ -48,25 +48,53 @@ static struct frame *vm_get_victim(void);
 static bool vm_do_claim_page(struct page *page);
 static struct frame *vm_evict_frame(void);
 
-/* Create the pending page object with initializer. If you want to create a
- * page, do not create it directly and make it through this function or
- * `vm_alloc_page`. */
+// Project 3: Anonymous Page
+// 초기화되지 않은 페이지(uninit 페이지)를 생성하고, 이를 보조 페이지 테이블(SPT)에 추가하는 함수
+// 페이지 폴트 시 호출되어 데이터를 메모리에 로드
 bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writable,
                                     vm_initializer *init, void *aux)
 {
 
     ASSERT(VM_TYPE(type) != VM_UNINIT)
-
+    // 보조 테이블의 정보를 가져옴
     struct supplemental_page_table *spt = &thread_current()->spt;
 
+    // upage 주소를 가지는 페이지가 보조 테이블 내에 존재하는지 확인
+    // 만약 없다면 보조 테이블에 정보 추가
     /* Check wheter the upage is already occupied or not. */
     if (spt_find_page(spt, upage) == NULL)
     {
-        /* TODO: Create the page, fetch the initialier according to the VM type,
-         * TODO: and then create "uninit" page struct by calling uninit_new. You
-         * TODO: should modify the field after calling the uninit_new. */
+        // 페이지 구조체 생성
+        struct page *page = malloc(sizeof(struct page));
+        if (page == NULL)
+            return false; // 메모리 할당 실패
 
-        /* TODO: Insert the page into the spt. */
+        // 페이지 초기화자 설정 (페이지 타입에 따라 선택)
+        bool (*initializer)(struct page *, enum vm_type, void *) = NULL;
+        switch (VM_TYPE(type))
+        {
+        case VM_ANON:
+            initializer = anon_initializer; // 익명 페이지 초기화 함수
+            break;
+        case VM_FILE:
+            initializer = file_backed_initializer; // 파일 기반 페이지 초기화 함수
+            break;
+        default:
+            free(page); // 잘못된 타입이면 메모리 해제
+            return false;
+        }
+
+        // 초기화되지 않은 페이지 생성
+        uninit_new(page, upage, init, type, aux, initializer);
+
+        // 보조 페이지 테이블에 삽입
+        if (!spt_insert_page(spt, page))
+        {
+            free(page); // 삽입 실패 시 메모리 해제
+            return false;
+        }
+
+        return true; // 성공적으로 페이지 생성 및 삽입
     }
 err:
     return false;
@@ -186,14 +214,28 @@ vm_handle_wp(struct page *page UNUSED)
 {
 }
 
-/* Return true on success */
+// Project 3: Anonymous Page
+// 페이지 폴트가 발생했을 때 호출되며, 페이지 폴트를 처리하는 함수
 bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
                          bool user UNUSED, bool write UNUSED, bool not_present UNUSED)
 {
     struct supplemental_page_table *spt UNUSED = &thread_current()->spt;
-    struct page *page = NULL;
-    /* TODO: Validate the fault */
-    /* TODO: Your code goes here */
+
+    // 주소가 null이거나 페이지 폴트가 적합하지 않은 경우 false 반환
+    if (addr == NULL || is_kernel_vaddr(addr) || !not_present)
+        return false;
+
+    // 보조 페이지 테이블에서 페이지를 찾기
+    struct page *page = spt_find_page(spt, addr);
+    if (page == NULL)
+        return false; // 해당 주소에 매핑된 페이지가 없으면 false 반환
+
+    // 쓰기 접근인지 확인하고 페이지 권한 검사
+    if (write && !page->writable)
+        return false; // 쓰기 권한이 없는 페이지에 쓰기 시도 시 false 반환
+
+    // 페이지를 실제로 메모리에 매핑
+    return vm_do_claim_page(page);
 
     return vm_do_claim_page(page);
 }
@@ -276,15 +318,62 @@ void supplemental_page_table_init(struct supplemental_page_table *spt UNUSED)
     hash_init(&spt->page_table, page_hash_func, page_less_func, NULL);
 }
 
-/* Copy supplemental page table from src to dst */
-bool supplemental_page_table_copy(struct supplemental_page_table *dst UNUSED,
-                                  struct supplemental_page_table *src UNUSED)
+// Project 3: Anonymous Page
+// 부모 페이지의 subpage table을 자식 페이지의 subpage table에 복제하는 함수
+bool supplemental_page_table_copy(struct supplemental_page_table *dst,
+                                  struct supplemental_page_table *src)
 {
+    // 해시 테이블 반복자를 선언
+    struct hash_iterator i;
+
+    // 소스 보조 페이지 테이블을 순회하기 위해 해시 반복자를 초기화
+    hash_first(&i, &src->page_table);
+
+    while (hash_next(&i))
+    {
+        // 현재 페이지 항목 가져오기
+        struct page *src_page = hash_entry(hash_cur(&i), struct page, hash_elem);
+
+        // 새 페이지 구조체를 동적으로 할당
+        struct page *new_page = malloc(sizeof(struct page));
+        if (new_page == NULL)
+        {
+            return false; // 메모리 할당 실패 시 false 반환
+        }
+
+        // 새 페이지의 기본 정보를 src_page로부터 복사
+        memcpy(new_page, src_page, sizeof(struct page));
+
+        // 페이지 데이터를 즉시 클레임 (메모리 할당 및 매핑 설정)
+        if (!vm_alloc_page_with_initializer(VM_TYPE(src_page->operations->type),
+                                            src_page->va,
+                                            src_page->writable,
+                                            src_page->uninit.init,
+                                            src_page->uninit.aux))
+        {
+            free(new_page); // 실패 시 메모리 해제
+            return false;
+        }
+
+        // 보조 페이지 테이블(dst)에 새 페이지 삽입
+        if (!spt_insert_page(dst, new_page))
+        {
+            free(new_page); // 삽입 실패 시 메모리 해제
+            return false;
+        }
+
+        // 페이지 데이터를 즉시 할당(복사)하여 동기화
+        if (src_page->frame != NULL)
+        {
+            // 물리 메모리를 복사
+            memcpy(new_page->frame->kva, src_page->frame->kva, PGSIZE);
+        }
+    }
+    return true;
 }
 
-/* Free the resource hold by the supplemental page table */
-void supplemental_page_table_kill(struct supplemental_page_table *spt UNUSED)
-{
-    /* TODO: Destroy all the supplemental_page_table hold by thread and
-     * TODO: writeback all the modified contents to the storage. */
+// Project 3: Anonymous Page
+// 보조 페이지 테이블(supplemental page table)에 의해 점유된 리소스를 해제하는 함수
+void supplemental_page_table_kill(struct supplemental_page_table *spt UNUSED) {
+    hash_clear(&spt->page_table, hash_destructor);  // 해시 테이블의 모든 요소 제거
 }

@@ -410,3 +410,11 @@ bool page_less_func(const struct hash_elem *a, const struct hash_elem *b, void *
     struct page *pb = hash_entry(b, struct page, hash_elem);
     return pa->va < pb->va; // 가상 주소를 기준으로 정렬
 }
+
+// Project 3: Anonymous Page
+// 해쉬 삭제함수
+void hash_destructor(struct hash_elem *e, void *aux) {
+    const struct page *p = hash_entry(e, struct page, hash_elem);
+    destroy(p);
+    free(p);
+}
