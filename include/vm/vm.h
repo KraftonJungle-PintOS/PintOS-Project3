@@ -3,6 +3,9 @@
 #include <stdbool.h>
 #include "threads/palloc.h"
 
+// Project 3: Memory Management
+#include "lib/kernel/hash.h"
+
 enum vm_type
 {
 	// 초기화되지 않은 페이지
@@ -49,13 +52,13 @@ struct thread;
 
 #define VM_TYPE(type) ((type) & 7)
 
- // uninit_page, file_page, anon_page, page cache(프로젝트4)의 부모 클래스
- // 구조체의 기본 멤버는 수정하거나 삭제하지 말 것
+// uninit_page, file_page, anon_page, page cache(프로젝트4)의 부모 클래스
+// 구조체의 기본 멤버는 수정하거나 삭제하지 말 것
 struct page
 {
 	// 페이지의 동작을 나타내는 변수
 	// 각 페이지 타입(익명, 파일, 초기화되지 않음 등)에 따른 동작(스왑 인/아웃, 제거 등)을 구현
-	const struct page_operations *operations;	
+	const struct page_operations *operations;
 
 	// 사용자 프로세스의 가상 주소를 저장하는 변수
 	// 페이지가 매핑된 가상 메모리 주소를 나타냄
@@ -63,9 +66,10 @@ struct page
 
 	// 페이지에 매핑된 물리 메모리 프레임에 대한 참조
 	// 프레임이 없는 경우 NULL(스왑 영역에 존재)
-	struct frame *frame; 
+	struct frame *frame;
 
 	/* Your implementation */
+	struct hash_elem hash_elem;
 
 	// 페이지 타입별 데이터 저장 공간
 	// 메모리 사용을 최적화하기 위해 공용체(union) 사용
@@ -90,6 +94,9 @@ struct frame
 	// 프레임에 매핑된 struct page에 대한 참조
 	// 프레임이 매핑된 가상 메모리 페이지를 나타냄
 	struct page *page;
+
+	// Project 3: Memory Management
+    struct list_elem frame_elem;
 };
 
 /* The function table for page operations.
@@ -121,12 +128,12 @@ struct page_operations
 	if ((page)->operations->destroy) \
 	(page)->operations->destroy(page)
 
-/* Representation of current process's memory space.
- * We don't want to force you to obey any specific design for this struct.
- * All designs up to you for this. */
+// Project 3: Memory Management
+// 페이지들의 상태를 저장하는 subpage table
+// hash 자료구조를 이용하여 구현
 struct supplemental_page_table
 {
-	
+	struct hash page_table;
 };
 
 #include "threads/thread.h"

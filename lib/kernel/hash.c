@@ -9,6 +9,9 @@
 #include "../debug.h"
 #include "threads/malloc.h"
 
+// Project 3: Memory Management
+#include "vm/vm.h" 
+
 #define list_elem_to_hash_elem(LIST_ELEM)                       \
 	list_entry(LIST_ELEM, struct hash_elem, list_elem)
 
@@ -392,3 +395,18 @@ remove_elem (struct hash *h, struct hash_elem *e) {
 	list_remove (&e->list_elem);
 }
 
+
+// Project 3: Memory Management
+// Subpage Table의 page_table을 초기화하기 위한 해싱함수
+unsigned page_hash_func(const struct hash_elem *e, void *aux) {
+    struct page *p = hash_entry(e, struct page, hash_elem);
+    return hash_bytes(&p->va, sizeof p->va); // 가상 주소를 기준으로 해싱
+}
+
+// Project 3: Memory Management
+// Subpage Table의 page_table을 초기화하기 위한 비교함수
+bool page_less_func(const struct hash_elem *a, const struct hash_elem *b, void *aux) {
+    struct page *pa = hash_entry(a, struct page, hash_elem);
+    struct page *pb = hash_entry(b, struct page, hash_elem);
+    return pa->va < pb->va; // 가상 주소를 기준으로 정렬
+}
