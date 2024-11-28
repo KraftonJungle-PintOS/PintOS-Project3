@@ -113,7 +113,7 @@ spt_find_page(struct supplemental_page_table *spt, void *va)
     struct hash_elem *e;
 
     // 검색 키 설정: 가상 주소를 기반으로 검색
-    temp.va = va;
+    temp.va = pg_round_down(va);
 
     // 해시 테이블에서 검색
     e = hash_find(&spt->page_table, &temp.hash_elem);
