@@ -2,6 +2,9 @@
 #define USERPROG_SYSCALL_H
 
 #include <stdbool.h>
+#include <stddef.h>
+
+#include "filesys/off_t.h"
 
 void syscall_init(void);
 
@@ -9,7 +12,12 @@ void syscall_init(void);
 typedef int pid_t;
 
 /** #Project 2: System Call **/
+#ifndef VM
 void check_address(void *addr);
+#else
+// Project 3: Memory Mapped Files
+struct page *check_address(void *addr);
+#endif
 
 void halt(void);
 void exit(int status);
@@ -28,5 +36,9 @@ void close(int fd);
 
 /** #Project 2: System Call */
 extern struct lock filesys_lock; // 파일 읽기/쓰기 용 lock
+
+// Project 3: Memory Mapped Files
+void *mmap(void *addr, size_t length, int writable, int fd, off_t offset);
+void munmap(void *addr);
 
 #endif /* userprog/syscall.h */

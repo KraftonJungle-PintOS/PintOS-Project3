@@ -1,12 +1,14 @@
 #include "userprog/syscall.h"
+
 #include <stdio.h>
 #include <syscall-nr.h>
-#include "threads/interrupt.h"
-#include "threads/thread.h"
-#include "threads/loader.h"
-#include "userprog/gdt.h"
-#include "threads/flags.h"
+
 #include "intrinsic.h"
+#include "threads/flags.h"
+#include "threads/interrupt.h"
+#include "threads/loader.h"
+#include "threads/thread.h"
+#include "userprog/gdt.h"
 
 /** #Project 2: System Call **/
 #include <string.h>
@@ -106,18 +108,55 @@ void syscall_handler(struct intr_frame *f UNUSED)
 	case SYS_CLOSE:
 		close(f->R.rdi);
 		break;
+#ifdef VM
+	// Project 3: Memory Mapped Files
+	case SYS_MMAP:
+		f->R.rax = mmap(f->R.rdi, f->R.rsi, f->R.rdx, f->R.r10, f->R.r8);
+		break;
+	case SYS_MUNMAP:
+		munmap(f->R.rdi);
+		break;
+#endif
 	default:
 		exit(-1);
 	}
 }
 
-/** #Project 2: System Call - check_address **/
-// 주소가 유효한지 확인하는 함수
+#ifndef VM
+/** #Project 2: System Call */
 void check_address(void *addr)
 {
-	if (is_kernel_vaddr(addr) || addr == NULL || pml4_get_page(thread_current()->pml4, addr) == NULL)
+	struct thread *curr = thread_current();
+
+	if (is_kernel_vaddr(addr) || addr == NULL || pml4_get_page(curr->pml4, addr) == NULL)
 		exit(-1);
 }
+#else
+// Project 3: Memory Mapped Files
+struct page *check_address(void *addr)
+{
+	struct thread *curr = thread_current();
+
+	if (is_kernel_vaddr(addr) || addr == NULL)
+		exit(-1);
+
+	return spt_find_page(&curr->spt, addr);
+}
+
+// Project 3: Memory Mapped Files
+// 버퍼 유효성 검사
+void check_valid_buffer(void *buffer, size_t size, bool writable)
+{
+	for (size_t i = 0; i < size; i++)
+	{
+		/* buffer가 spt에 존재하는지 검사 */
+		struct page *page = check_address(buffer + i);
+
+		if (!page || (writable && !(page->writable)))
+			exit(-1);
+	}
+}
+#endif
 
 /** #Project 2: System Call - halt **/
 // Pintos를 강제 종료하는 시스템콜
@@ -347,3 +386,33 @@ void close(int fd)
 
 	file_close(file);
 }
+#ifdef VM
+// Project 3: Memory Mapped Files
+void *mmap(void *addr, size_t length, int writable, int fd, off_t offset)
+{
+    if (!addr || pg_round_down(addr) != addr || is_kernel_vaddr(addr) || is_kernel_vaddr(addr + length))
+        return NULL;
+
+    if ((void *)offset != pg_round_down((void *)offset) || offset % PGSIZE != 0)
+        return NULL;
+
+    if (spt_find_page(&thread_current()->spt, addr))
+        return NULL;
+
+    struct file *file = process_get_file(fd);
+
+    if ((file >= 1 && file <= 2) || file == NULL)
+        return NULL;
+
+    if (file_length(file) == 0 || (long)length <= 0)
+        return NULL;
+
+    return do_mmap(addr, length, writable, file, offset);
+}
+
+// Project 3: Memory Mapped Files
+void munmap(void *addr)
+{
+    do_munmap(addr);
+}
+#endif

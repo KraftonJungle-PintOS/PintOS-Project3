@@ -703,8 +703,7 @@ install_page(void *upage, void *kpage, bool writable)
 
 // Project 3: Anonymous Page
 // Lazy Loading 구현
-static bool
-lazy_load_segment(struct page *page, void *aux)
+bool lazy_load_segment(struct page *page, void *aux)
 {
 	// aux 구조체를 이용하여 파일 정보를 가져옴
 	struct aux *load_info = (struct aux *)aux;
@@ -734,7 +733,6 @@ lazy_load_segment(struct page *page, void *aux)
 
 	return true; // 페이지 로드 성공
 }
-
 
 /* Loads a segment starting at offset OFS in FILE at address
  * UPAGE.  In total, READ_BYTES + ZERO_BYTES bytes of virtual

@@ -87,6 +87,9 @@ bool vm_alloc_page_with_initializer(enum vm_type type, void *upage, bool writabl
         // 초기화되지 않은 페이지 생성
         uninit_new(page, upage, init, type, aux, initializer);
 
+        // writable 초기화
+        page->writable = writable;
+
         // 보조 페이지 테이블에 삽입
         if (!spt_insert_page(spt, page))
         {

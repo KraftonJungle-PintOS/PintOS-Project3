@@ -33,4 +33,7 @@ struct aux{
     size_t page_read_bytes;
 };
 
+// Project 3: Memory Mapped Files
+bool lazy_load_segment(struct page *page, void *aux);
+
 #endif /* userprog/process.h */
