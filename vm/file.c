@@ -28,51 +28,68 @@ void vm_file_init(void)
 
 // Project 3: Memory Mapped Files
 /* Initialize the file backed page */
-bool file_backed_initializer(struct page *page, enum vm_type type, void *kva) {
-    /* Set up the handler */
-    page->operations = &file_ops;
+bool file_backed_initializer(struct page *page, enum vm_type type, void *kva)
+{
+	/* Set up the handler */
+	page->operations = &file_ops;
 
-    struct file_page *file_page = &page->file;
+	struct file_page *file_page = &page->file;
 
-    struct aux *aux = (struct aux *)page->uninit.aux;
-    file_page->file = aux->file;
-    file_page->offset = aux->offset;
-    file_page->page_read_bytes = aux->page_read_bytes;
+	struct aux *aux = (struct aux *)page->uninit.aux;
+	file_page->file = aux->file;
+	file_page->offset = aux->offset;
+	file_page->page_read_bytes = aux->page_read_bytes;
 
-    return true;
+	return true;
 }
 
 /* Swap in the page by read contents from the file. */
+// Project 3: Swap In/Out
 static bool
 file_backed_swap_in(struct page *page, void *kva)
 {
 	struct file_page *file_page UNUSED = &page->file;
+
+	return lazy_load_segment(page, file_page);
 }
 
-/* Swap out the page by writeback contents to the file. */
-static bool
-file_backed_swap_out(struct page *page)
+// Project 3: Swap In/Out
+static bool file_backed_swap_out(struct page *page)
 {
 	struct file_page *file_page UNUSED = &page->file;
+	if (pml4_is_dirty(thread_current()->pml4, page->va))
+	{
+		file_write_at(file_page->file, page->va, file_page->page_read_bytes, file_page->offset);
+		pml4_set_dirty(thread_current()->pml4, page->va, false);
+	}
+
+	page->frame->page = NULL;
+	page->frame = NULL;
+	pml4_clear_page(thread_current()->pml4, page->va);
+
+	return true;
 }
 
 // Project 3: Memory Mapped Files
-static void file_backed_destroy(struct page *page) {
-    struct file_page *file_page UNUSED = &page->file;
+static void file_backed_destroy(struct page *page)
+{
+	struct file_page *file_page UNUSED = &page->file;
 
-    if (pml4_is_dirty(thread_current()->pml4, page->va)) {
-        file_write_at(file_page->file, page->va, file_page->page_read_bytes, file_page->offset);
-        pml4_set_dirty(thread_current()->pml4, page->va, false);
-    }
+	if (pml4_is_dirty(thread_current()->pml4, page->va))
+	{
+		file_write_at(file_page->file, page->va, file_page->page_read_bytes, file_page->offset);
+		pml4_set_dirty(thread_current()->pml4, page->va, false);
+	}
 
-    if (page->frame) {
-        list_remove(&page->frame->frame_elem);
-        page->frame->page = NULL;
-        page->frame = NULL;
-        free(page->frame);
-    }
+	if (page->frame)
+	{
+		list_remove(&page->frame->frame_elem);
+		page->frame->page = NULL;
+		page->frame = NULL;
+		free(page->frame);
+	}
 
-    pml4_clear_page(thread_current()->pml4, page->va);
+	pml4_clear_page(thread_current()->pml4, page->va);
 }
 
 // Project 3: Memory Mapped Files
