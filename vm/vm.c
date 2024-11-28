@@ -127,22 +127,7 @@ spt_find_page(struct supplemental_page_table *spt, void *va)
 // 페이지를 해쉬 자료형 spt에 삽입하는 함수
 bool spt_insert_page(struct supplemental_page_table *spt, struct page *page)
 {
-    // 삽입 성공 여부를 나타내는 변수
-    bool succ = false;
-
-    // 삽입하려는 페이지의 가상 주소가 이미 존재하는지 확인
-    if (spt_find_page(spt, page->va) == NULL)
-    {
-        // 중복된 페이지가 없으면 해시 테이블에 삽입
-        struct hash_elem *result = hash_insert(&spt->page_table, &page->hash_elem);
-        if (result == NULL)
-        {
-            // 삽입 성공
-            succ = true;
-        }
-    }
-
-    return succ; // 삽입 성공 여부 반환
+    return hash_insert(&spt->page_table, &page->hash_elem) ? false : true; // 존재하지 않으면 삽입
 }
 
 /* Get the struct frame, that will be evicted. */
