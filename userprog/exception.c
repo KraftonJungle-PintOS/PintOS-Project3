@@ -57,6 +57,9 @@ void exception_init(void)
 	/* Most exceptions can be handled with interrupts turned on.
 	   We need to disable interrupts for page faults because the
 	   fault address is stored in CR2 and needs to be preserved. */
+
+	// Project 3: Page Fault
+	// 인터럽트 디스크립터 테이블 IDT 14번에 page_fault 함수 매핑
 	intr_register_int(14, 0, INTR_OFF, page_fault, "#PF Page-Fault Exception");
 }
 

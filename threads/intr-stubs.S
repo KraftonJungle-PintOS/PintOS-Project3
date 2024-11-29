@@ -11,6 +11,12 @@
    stack, set up some registers as needed by the kernel, and then
    call intr_handler(), which actually handles the interrupt.
 */
+
+// Project 3: Page Fault
+// 스택에 저장된 **인터럽트 번호(14)**와 오류 코드(0)를 intr_handler에 전달
+// intr_handler는 스택의 struct intr_frame을 참조하여 frame->vec_no를 확인함
+// frame->vec_no == 14일 경우, IDT 14번에 등록된 핸들러(intr_handlers[14])를 호출함
+
 .section .text
 .func intr_entry
 intr_entry:
@@ -125,7 +131,11 @@ STUB(08, REAL) STUB(09, zero) STUB(0a, REAL) STUB(0b, REAL)
 STUB(0c, zero) STUB(0d, REAL) STUB(0e, REAL) STUB(0f, zero)
 
 STUB(10, zero) STUB(11, REAL) STUB(12, zero) STUB(13, zero)
+
+// Project 3: Page Fault
+// 공통 핸들러의 위치로 이동 후, intr_stubs[14]에 해당 핸들러 주소 저장
 STUB(14, zero) STUB(15, zero) STUB(16, zero) STUB(17, zero)
+
 STUB(18, REAL) STUB(19, zero) STUB(1a, REAL) STUB(1b, REAL)
 STUB(1c, zero) STUB(1d, REAL) STUB(1e, REAL) STUB(1f, zero)
 

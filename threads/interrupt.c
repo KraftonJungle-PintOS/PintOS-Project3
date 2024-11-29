@@ -51,6 +51,10 @@ struct gate {
    the CPU.  See [IA32-v3a] sections 5.10 "Interrupt Descriptor
    Table (IDT)", 5.11 "IDT Descriptors", 5.12.1.2 "Flag Usage By
    Exception- or Interrupt-Handler Procedure". */
+   
+// Project 3: Page Fault
+// 인터럽트 디스크립터 테이블(IDT)
+// 각 인터럽트 번호(Interrupt Vector Number)에 대해 처리해야 할 핸들러를 매핑한 데이터 구조
 static struct gate idt[INTR_CNT];
 
 static struct desc_ptr idt_desc = {
@@ -207,6 +211,14 @@ intr_init (void) {
    privilege level DPL.  Names the interrupt NAME for debugging
    purposes.  The interrupt handler will be invoked with
    interrupt status set to LEVEL. */
+
+// Project 3: Page Fault
+// 지정된 인터럽트 번호(vec_no)에 대해 핸들러를 등록하는 함수
+// 인터럽트 디스크립터 테이블(IDT)에 vec_no에 해당하는 게이트를 설정하고,
+// intr_handlers 배열에 해당 번호의 핸들러 함수를 저장하여 인터럽트를 처리할 수 있도록 준비합
+// Page Fault의 경우 14번에 등록이 되며, Page Fault 예외가 발생하면 IDT를 통해 intr-stubs.S의 어셈블리 코드에서 동작
+// 어셈블리 코드는 공통 핸들러(intr_entry)를 호출하며, intr_entry는 C 코드의 intr_handler로 연결됨
+// intr_handler는 intr_handlers[14]에 등록된 핸들러를 호출하여 예외를 처리
 static void
 register_handler (uint8_t vec_no, int dpl, enum intr_level level,
 		intr_handler_func *handler, const char *name) {
@@ -244,6 +256,12 @@ intr_register_ext (uint8_t vec_no, intr_handler_func *handler,
    [IA32-v3a] sections 4.5 "Privilege Levels" and 4.8.1.1
    "Accessing Nonconforming Code Segments" for further
    discussion. */
+
+// Project 3: Page Fault
+// 인터럽트 처리를 위한 함수
+// vec_no로 지정된 인터럽트 번호에 해당하는 핸들러를 등록함
+// Page Fault(#PF)의 경우 intr_register_int를 통해 인터럽트 벡터 14번에 핸들러가 등록됨
+// 예외 번호(vec_no)는 0~31 사이 값이며, 외부 인터럽트(0x20~0x2f)는 처리하지 않음
 void
 intr_register_int (uint8_t vec_no, int dpl, enum intr_level level,
 		intr_handler_func *handler, const char *name)
