@@ -71,7 +71,6 @@ struct page
 	/* Your implementation */
 	// Project 3: Anonymous Page
 	bool writable;
-
 	struct hash_elem hash_elem;
 
 	// 페이지 타입별 데이터 저장 공간

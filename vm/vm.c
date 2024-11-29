@@ -139,6 +139,8 @@ vm_get_victim(void)
 {
     struct frame *victim = NULL;
     /* TODO: The policy for eviction is up to you. */
+    if (victim->page)
+        swap_out(victim->page);
 
     return victim;
 }
@@ -164,27 +166,19 @@ vm_evict_frame(void)
 static struct frame *
 vm_get_frame(void)
 {
-    // 사용자 메모리 풀에서 물리 페이지 할당
-    void *kpage = palloc_get_page(PAL_USER);
-
-    // 물리 페이지 할당 실패 처리
-    if (kpage == NULL)
-    {
-        PANIC("todo: handle page allocation failure"); // 현재는 PANIC으로 처리
-    }
-
     // 프레임 구조체 할당
     struct frame *frame = malloc(sizeof(struct frame));
-    if (frame == NULL)
-    {
-        PANIC("todo: handle frame allocation failure"); // 메모리 부족 시 PANIC 처리
-    }
+    ASSERT(frame != NULL);
 
-    // 프레임 초기화
-    frame->kva = kpage; // 할당된 커널 가상 주소 저장
+    frame->kva = palloc_get_page(PAL_USER | PAL_ZERO);
+
+    if (frame->kva == NULL)
+        frame = vm_evict_frame();
+    else
+        list_push_back(&frame_table, &frame->frame_elem);
+
     frame->page = NULL; // 초기에는 연결된 페이지가 없음
 
-    ASSERT(frame != NULL);
     ASSERT(frame->page == NULL);
 
     return frame; // 초기화된 프레임 반환
@@ -336,53 +330,53 @@ void supplemental_page_table_init(struct supplemental_page_table *spt UNUSED)
 bool supplemental_page_table_copy(struct supplemental_page_table *dst,
                                   struct supplemental_page_table *src)
 {
-    // 해시 테이블 반복자를 선언
-    struct hash_iterator i;
+    struct hash_iterator iter;
+    struct page *dst_page;
+    struct aux *aux;
 
-    // 소스 보조 페이지 테이블을 순회하기 위해 해시 반복자를 초기화
-    hash_first(&i, &src->page_table);
+    hash_first(&iter, &src->page_table);
 
-    while (hash_next(&i))
+    while (hash_next(&iter))
     {
-        // 현재 페이지 항목 가져오기
-        struct page *src_page = hash_entry(hash_cur(&i), struct page, hash_elem);
+        struct page *src_page = hash_entry(hash_cur(&iter), struct page, hash_elem);
+        enum vm_type type = src_page->operations->type;
+        void *upage = src_page->va;
+        bool writable = src_page->writable;
 
-        // 새 페이지 구조체를 동적으로 할당
-        struct page *new_page = malloc(sizeof(struct page));
-        if (new_page == NULL)
+        switch (type)
         {
-            return false; // 메모리 할당 실패 시 false 반환
-        }
+        case VM_UNINIT: // src 타입이 initialize 되지 않았을 경우
+            if (!vm_alloc_page_with_initializer(page_get_type(src_page), upage, writable, src_page->uninit.init, src_page->uninit.aux))
+                goto err;
+            break;
 
-        // 새 페이지의 기본 정보를 src_page로부터 복사
-        memcpy(new_page, src_page, sizeof(struct page));
+        case VM_FILE: // src 타입이 FILE인 경우
+            if (!vm_alloc_page_with_initializer(type, upage, writable, NULL, &src_page->file))
+                goto err;
 
-        // 페이지 데이터를 즉시 클레임 (메모리 할당 및 매핑 설정)
-        if (!vm_alloc_page_with_initializer(VM_TYPE(src_page->operations->type),
-                                            src_page->va,
-                                            src_page->writable,
-                                            src_page->uninit.init,
-                                            src_page->uninit.aux))
-        {
-            free(new_page); // 실패 시 메모리 해제
-            return false;
-        }
+            dst_page = spt_find_page(dst, upage); // 대응하는 물리 메모리 데이터 복제
+            if (!file_backed_initializer(dst_page, type, NULL))
+                goto err;
 
-        // 보조 페이지 테이블(dst)에 새 페이지 삽입
-        if (!spt_insert_page(dst, new_page))
-        {
-            free(new_page); // 삽입 실패 시 메모리 해제
-            return false;
-        }
+            dst_page->frame = src_page->frame;
+            if (!pml4_set_page(thread_current()->pml4, dst_page->va, src_page->frame->kva, src_page->writable))
+                goto err;
+            break;
 
-        // 페이지 데이터를 즉시 할당(복사)하여 동기화
-        if (src_page->frame != NULL)
-        {
-            // 물리 메모리를 복사
-            memcpy(new_page->frame->kva, src_page->frame->kva, PGSIZE);
+        case VM_ANON:                                  // src 타입이 anon인 경우
+            if (!vm_alloc_page(type, upage, writable)) // UNINIT 페이지 생성 및 초기화
+                goto err;
+            break;
+
+        default:
+            goto err;
         }
     }
+
     return true;
+
+err:
+    return false;
 }
 
 // Project 3: Anonymous Page
