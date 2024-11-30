@@ -133,11 +133,9 @@ bool spt_insert_page(struct supplemental_page_table *spt, struct page *page)
     return hash_insert(&spt->page_table, &page->hash_elem) ? false : true; // 존재하지 않으면 삽입
 }
 
-/* Project 3: Memory Management */
-/* Clock(Second-Chance) 알고리즘을 기반으로 페이지 교체 정책을 구현 */
-
 // Project 3: Swap In/Out
 /* Frame 테이블에서 교체할 frame(victim)을 선택하는 함수 */
+/* Clock(Second-Chance) 알고리즘을 기반으로 페이지 교체 구현 */
 static struct frame *
 vm_get_victim(void)
 {

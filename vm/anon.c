@@ -57,63 +57,97 @@ bool anon_initializer(struct page *page, enum vm_type type, void *kva)
 	return true; // 초기화 성공
 }
 
-
-
 // Project 3: Swap In/Out
-static bool anon_swap_in(struct page *page, void *kva) {
-    struct anon_page *anon_page = &page->anon;
-    size_t slot = anon_page->swap_slot;
-    size_t sector = slot * SLOT_SIZE;
+/* 스왑 디스크에서 데이터를 읽어와 페이지를 메모리에 로드하는 함수 */
+static bool anon_swap_in(struct page *page, void *kva)
+{
+	// 현재 페이지의 anon_page 정보를 가져옴
+	struct anon_page *anon_page = &page->anon;
 
-    if (slot == BITMAP_ERROR || !bitmap_test(swap_table, slot))
-        return false;
+	// 스왑 슬롯 번호를 가져옴
+	size_t slot = anon_page->swap_slot;
 
-    bitmap_set(swap_table, slot, false);
+	// 슬롯 번호를 통해 디스크의 시작 섹터를 계산
+	size_t sector = slot * SLOT_SIZE;
 
-    for (size_t i = 0; i < SLOT_SIZE; i++)
-        disk_read(swap_disk, sector + i, kva + DISK_SECTOR_SIZE * i);
+	// 스왑 슬롯이 유효하지 않거나 사용 중이지 않은 슬롯이면 실패 처리
+	if (slot == BITMAP_ERROR || !bitmap_test(swap_table, slot))
+		return false;
 
-    sector = BITMAP_ERROR;
+	// 스왑 테이블에서 해당 슬롯을 비어있는 상태로 표시
+	bitmap_set(swap_table, slot, false);
 
-    return true;
+	// 디스크에서 데이터를 읽어와 메모리(kva)에 복사
+	for (size_t i = 0; i < SLOT_SIZE; i++)
+		disk_read(swap_disk, sector + i, kva + DISK_SECTOR_SIZE * i);
+
+	// 스왑 슬롯 번호를 초기화 (더 이상 사용되지 않음을 표시)
+	sector = BITMAP_ERROR;
+
+	return true; // 성공적으로 데이터 로드
 }
 
 // Project 3: Swap In/Out
-static bool anon_swap_out(struct page *page) {
-    struct anon_page *anon_page = &page->anon;
+/* 페이지 데이터를 메모리에서 스왑 디스크로 이동하는 함수 */
+static bool anon_swap_out(struct page *page)
+{
+	// 현재 페이지의 anon_page 정보를 가져옴
+	struct anon_page *anon_page = &page->anon;
 
-    size_t free_idx = bitmap_scan_and_flip(swap_table, 0, 1, false);
+	// 스왑 테이블에서 비어있는 슬롯을 검색하고 해당 슬롯을 사용 중으로 표시
+	size_t free_idx = bitmap_scan_and_flip(swap_table, 0, 1, false);
 
-    if (free_idx == BITMAP_ERROR)
-        return false;
+	// 스왑 슬롯을 찾지 못한 경우(디스크 공간 부족) 실패 처리
+	if (free_idx == BITMAP_ERROR)
+		return false;
 
-    size_t sector = free_idx * SLOT_SIZE;
+	// 디스크에서 데이터 저장을 시작할 섹터 번호 계산
+	size_t sector = free_idx * SLOT_SIZE;
 
-    for (size_t i = 0; i < SLOT_SIZE; i++)
-        disk_write(swap_disk, sector + i, page->va + DISK_SECTOR_SIZE * i);
+	// 페이지의 데이터를 디스크로 저장
+	for (size_t i = 0; i < SLOT_SIZE; i++)
+		disk_write(swap_disk, sector + i, page->va + DISK_SECTOR_SIZE * i);
 
-    anon_page->swap_slot = free_idx;
+	// anon_page에 스왑 슬롯 번호 저장 (디스크에서 저장된 위치 기록)
+	anon_page->swap_slot = free_idx;
 
-    page->frame->page = NULL;
-    page->frame = NULL;
-    pml4_clear_page(thread_current()->pml4, page->va);
+	// 페이지와 프레임의 연결 해제
+	page->frame->page = NULL;
+	page->frame = NULL;
 
-    return true;
+	// 페이지 테이블에서 가상 주소 제거
+	pml4_clear_page(thread_current()->pml4, page->va);
+
+	return true; // 스왑 아웃 성공
 }
 
 // Project 3: Swap In/Out
-static void anon_destroy(struct page *page) {
-    struct anon_page *anon_page = &page->anon;
+/* 익명 페이지(Anonymous Page)를 삭제하는 함수 */
+static void anon_destroy(struct page *page)
+{
+	// 페이지의 anon_page 정보를 가져옴
+	struct anon_page *anon_page = &page->anon;
 
-    /** Project 3: Swap In/Out - 점거중인 bitmap 삭제 */
-    if (anon_page->swap_slot != BITMAP_ERROR)
-        bitmap_reset(swap_table, anon_page->swap_slot);
+	// 점유 중인 스왑 슬롯 초기화
+	if (anon_page->swap_slot != BITMAP_ERROR)
+	{
+		// 스왑 테이블에서 해당 스왑 슬롯의 점유 상태를 해제
+		bitmap_reset(swap_table, anon_page->swap_slot);
+	}
 
-    /** Project 3: Anonymous Page - 점거중인 frame 삭제 */
-    if (page->frame) {
-        list_remove(&page->frame->frame_elem);
-        page->frame->page = NULL;
-        free(page->frame);
-        page->frame = NULL;
-    }
+	// 점유 중인 프레임 삭제
+	if (page->frame)
+	{
+		// 프레임 리스트에서 현재 페이지와 연결된 프레임을 제거
+		list_remove(&page->frame->frame_elem);
+
+		// 프레임과 페이지의 연결을 해제
+		page->frame->page = NULL;
+
+		// 프레임 메모리 해제
+		free(page->frame);
+
+		// 페이지의 프레임 포인터 초기화
+		page->frame = NULL;
+	}
 }
