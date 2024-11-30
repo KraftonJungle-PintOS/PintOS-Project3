@@ -541,7 +541,7 @@ load(const char *file_name, struct intr_frame *if_)
 done:
 	/* We arrive here whether the load is successful or not. */
 	/** #Project 3: Memory Management - Load Race 방지 */
-	lock_release(&filesys_lock);v
+	lock_release(&filesys_lock);
 
 	return success;
 }

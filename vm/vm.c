@@ -257,6 +257,7 @@ void vm_dealloc_page(struct page *page)
 
 /* Claim the page that allocate on VA. */
 // Project 3: Memory Management
+// 가상주소에 맞는 page가 spt에 매핑되어있는지 확인하고 vm_do_claim_page를 호출하여 실제 물리 메모리에 매핑하는 함수
 bool vm_claim_page(void *va)
 {
     // 현재 스레드의 보조 페이지 테이블 가져오기
@@ -289,6 +290,7 @@ bool vm_claim_page(void *va)
 
 /* Claim the PAGE and set up the mmu. */
 // Project 3: Memory Management
+// page에 대한 새로운 물리 frame을 할당 받고 swap_in를 호출하여 할당받은 프레임에 page 데이터를 로드하는 함수
 static bool
 vm_do_claim_page(struct page *page)
 {
