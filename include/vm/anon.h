@@ -13,11 +13,12 @@ enum vm_type;
 
 // Project 3: Anonymous Page
 // anon_page 구조체 수현, swap out 되었을때 스왑공간 주소 저장할 swap_slot 변수 선언
-struct anon_page {
+struct anon_page
+{
     size_t swap_slot;
 };
 
-void vm_anon_init (void);
-bool anon_initializer (struct page *page, enum vm_type type, void *kva);
+void vm_anon_init(void);
+bool anon_initializer(struct page *page, enum vm_type type, void *kva);
 
 #endif

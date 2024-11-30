@@ -133,27 +133,63 @@ bool spt_insert_page(struct supplemental_page_table *spt, struct page *page)
     return hash_insert(&spt->page_table, &page->hash_elem) ? false : true; // 존재하지 않으면 삽입
 }
 
-/* Get the struct frame, that will be evicted. */
+/* Project 3: Memory Management */
+/* Clock(Second-Chance) 알고리즘을 기반으로 페이지 교체 정책을 구현 */
+
+// Project 3: Swap In/Out
+/* Frame 테이블에서 교체할 frame(victim)을 선택하는 함수 */
 static struct frame *
 vm_get_victim(void)
 {
-    struct frame *victim = NULL;
-    /* TODO: The policy for eviction is up to you. */
-    if (victim->page)
-        swap_out(victim->page);
+    static struct list_elem *clock_ptr = NULL;
 
-    return victim;
+    if (clock_ptr == NULL || clock_ptr == list_end(&frame_table))
+    {
+        // clock_ptr 초기화 또는 끝에 도달한 경우 처음으로 이동
+        clock_ptr = list_begin(&frame_table);
+    }
+
+    // Clock 알고리즘을 사용하여 victim을 선택
+    while (true)
+    {
+        struct frame *frame = list_entry(clock_ptr, struct frame, frame_elem);
+
+        // 페이지의 접근 비트를 확인
+        if (!pml4_is_accessed(thread_current()->pml4, frame->page->va))
+        {
+            // 접근 비트가 0인 경우 교체 대상으로 선택
+            return frame;
+        }
+        else
+        {
+            // 접근 비트를 초기화하고 다음 프레임으로 이동
+            pml4_set_accessed(thread_current()->pml4, frame->page->va, false);
+            clock_ptr = list_next(clock_ptr);
+
+            // 끝에 도달한 경우 처음으로 다시 순회
+            if (clock_ptr == list_end(&frame_table))
+                clock_ptr = list_begin(&frame_table);
+        }
+    }
 }
 
-/* Evict one page and return the corresponding frame.
- * Return NULL on error.*/
+// Project 3: Swap In/Out
+/* victim frame을 스왑 공간으로 내보내고 해당 frame을 반환 */
 static struct frame *
 vm_evict_frame(void)
 {
-    struct frame *victim UNUSED = vm_get_victim();
-    /* TODO: swap out the victim and return the evicted frame. */
+    struct frame *victim = vm_get_victim();
 
-    return NULL;
+    // victim의 페이지가 존재하면 스왑 아웃
+    if (victim && victim->page)
+    {
+        if (!swap_out(victim->page))
+        {
+            PANIC("Failed to swap out page.");
+        }
+    }
+
+    return victim; // 스왑 아웃된 frame 반환
 }
 
 /* palloc() and get frame. If there is no available page, evict the page

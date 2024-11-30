@@ -57,23 +57,63 @@ bool anon_initializer(struct page *page, enum vm_type type, void *kva)
 	return true; // 초기화 성공
 }
 
-/* Swap in the page by read contents from the swap disk. */
-static bool
-anon_swap_in(struct page *page, void *kva)
-{
-	struct anon_page *anon_page = &page->anon;
+
+
+// Project 3: Swap In/Out
+static bool anon_swap_in(struct page *page, void *kva) {
+    struct anon_page *anon_page = &page->anon;
+    size_t slot = anon_page->swap_slot;
+    size_t sector = slot * SLOT_SIZE;
+
+    if (slot == BITMAP_ERROR || !bitmap_test(swap_table, slot))
+        return false;
+
+    bitmap_set(swap_table, slot, false);
+
+    for (size_t i = 0; i < SLOT_SIZE; i++)
+        disk_read(swap_disk, sector + i, kva + DISK_SECTOR_SIZE * i);
+
+    sector = BITMAP_ERROR;
+
+    return true;
 }
 
-/* Swap out the page by writing contents to the swap disk. */
-static bool
-anon_swap_out(struct page *page)
-{
-	struct anon_page *anon_page = &page->anon;
+// Project 3: Swap In/Out
+static bool anon_swap_out(struct page *page) {
+    struct anon_page *anon_page = &page->anon;
+
+    size_t free_idx = bitmap_scan_and_flip(swap_table, 0, 1, false);
+
+    if (free_idx == BITMAP_ERROR)
+        return false;
+
+    size_t sector = free_idx * SLOT_SIZE;
+
+    for (size_t i = 0; i < SLOT_SIZE; i++)
+        disk_write(swap_disk, sector + i, page->va + DISK_SECTOR_SIZE * i);
+
+    anon_page->swap_slot = free_idx;
+
+    page->frame->page = NULL;
+    page->frame = NULL;
+    pml4_clear_page(thread_current()->pml4, page->va);
+
+    return true;
 }
 
-/* Destroy the anonymous page. PAGE will be freed by the caller. */
-static void
-anon_destroy(struct page *page)
-{
-	struct anon_page *anon_page = &page->anon;
+// Project 3: Swap In/Out
+static void anon_destroy(struct page *page) {
+    struct anon_page *anon_page = &page->anon;
+
+    /** Project 3: Swap In/Out - 점거중인 bitmap 삭제 */
+    if (anon_page->swap_slot != BITMAP_ERROR)
+        bitmap_reset(swap_table, anon_page->swap_slot);
+
+    /** Project 3: Anonymous Page - 점거중인 frame 삭제 */
+    if (page->frame) {
+        list_remove(&page->frame->frame_elem);
+        page->frame->page = NULL;
+        free(page->frame);
+        page->frame = NULL;
+    }
 }
