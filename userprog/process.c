@@ -728,11 +728,9 @@ bool lazy_load_segment(struct page *page, void *aux)
 	// 나머지 부분을 0으로 초기화
 	memset(kva + page_read_bytes, 0, page_zero_bytes);
 
-	// aux 메모리 해제
-	free(aux);
-
 	return true; // 페이지 로드 성공
 }
+
 
 /* Loads a segment starting at offset OFS in FILE at address
  * UPAGE.  In total, READ_BYTES + ZERO_BYTES bytes of virtual
