@@ -402,6 +402,10 @@ bool supplemental_page_table_copy(struct supplemental_page_table *dst,
         case VM_ANON:                                  // src 타입이 anon인 경우
             if (!vm_alloc_page(type, upage, writable)) // UNINIT 페이지 생성 및 초기화
                 goto err;
+
+            vm_claim_page(upage);
+            struct page *dst_page = spt_find_page(dst, upage);
+            memcpy(dst_page->frame->kva, src_page->frame->kva, PGSIZE);
             break;
 
         default:
