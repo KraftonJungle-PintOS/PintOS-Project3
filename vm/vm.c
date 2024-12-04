@@ -258,7 +258,7 @@ bool vm_try_handle_fault(struct intr_frame *f UNUSED, void *addr UNUSED,
 {
     struct supplemental_page_table *spt UNUSED = &thread_current()->spt;
 
-    // 주소가 null이거나 페이지 폴트가 적합하지 않은 경우 false 반환
+    // 주소가 null이거나 커널 주소인 경우 적합하지 않은 경우 false 반환
     if (addr == NULL || is_kernel_vaddr(addr) || !not_present)
         return false;
 

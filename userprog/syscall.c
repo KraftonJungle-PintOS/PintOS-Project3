@@ -273,6 +273,9 @@ int filesize(int fd)
 // fd라는 파일 디스크립터를 가진 파일에서 length만큼 데이터를 읽어 buffer에 저장하는 함수
 int read(int fd, void *buffer, unsigned length)
 {
+#ifdef VM
+	check_valid_buffer(buffer, length, true);
+#endif
 	check_address(buffer);
 
 	// fd가 0인 경우(STDIN) keyboard로 직접 입력 받도록 함
@@ -318,6 +321,9 @@ int read(int fd, void *buffer, unsigned length)
 // fd라는 파일 디스크립터를 가진 파일에 buffer의 내용을 length만큼 파일에 작성
 int write(int fd, const void *buffer, unsigned length)
 {
+#ifdef VM
+	check_valid_buffer(buffer, length, false);
+#endif
 	check_address(buffer);
 
 	off_t bytes = -1;
@@ -390,29 +396,29 @@ void close(int fd)
 // Project 3: Memory Mapped Files
 void *mmap(void *addr, size_t length, int writable, int fd, off_t offset)
 {
-    if (!addr || pg_round_down(addr) != addr || is_kernel_vaddr(addr) || is_kernel_vaddr(addr + length))
-        return NULL;
+	if (!addr || pg_round_down(addr) != addr || is_kernel_vaddr(addr) || is_kernel_vaddr(addr + length))
+		return NULL;
 
-    if ((void *)offset != pg_round_down((void *)offset) || offset % PGSIZE != 0)
-        return NULL;
+	if ((void *)offset != pg_round_down((void *)offset) || offset % PGSIZE != 0)
+		return NULL;
 
-    if (spt_find_page(&thread_current()->spt, addr))
-        return NULL;
+	if (spt_find_page(&thread_current()->spt, addr))
+		return NULL;
 
-    struct file *file = process_get_file(fd);
+	struct file *file = process_get_file(fd);
 
-    if ((file >= 1 && file <= 2) || file == NULL)
-        return NULL;
+	if ((file >= 1 && file <= 2) || file == NULL)
+		return NULL;
 
-    if (file_length(file) == 0 || (long)length <= 0)
-        return NULL;
+	if (file_length(file) == 0 || (long)length <= 0)
+		return NULL;
 
-    return do_mmap(addr, length, writable, file, offset);
+	return do_mmap(addr, length, writable, file, offset);
 }
 
 // Project 3: Memory Mapped Files
 void munmap(void *addr)
 {
-    do_munmap(addr);
+	do_munmap(addr);
 }
 #endif
